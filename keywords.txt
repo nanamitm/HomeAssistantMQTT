@@ -14,6 +14,7 @@ getValue	KEYWORD2
 publishConfigSensor	KEYWORD2
 publishConfigBinarySensor	KEYWORD2
 publishConfigNumber	KEYWORD2
+publishConfigText	KEYWORD2
 publishConfigButton	KEYWORD2
 publishConfigSelect	KEYWORD2
 publishConfigSwitch	KEYWORD2
