@@ -6,6 +6,11 @@
 
 #include "HomeAssistantMQTT.h"
 
+
+#define MQTTBUFFER       1024
+#define MQTTKEEPALIVE    5
+
+
 /////////////////////////////////////////////////////////////////////////////////
 /// Settings
 /////////////////////////////////////////////////////////////////////////////////
@@ -36,7 +41,13 @@ void setup() {
 #if defined(DEBUG) || defined(CFG_ON_SERIAL)
   Serial.begin(115200);
   delay(1000);
+  Serial.println();
+  Serial.print("Delaying startup for ");
+  Serial.print(MQTTKEEPALIVE + 5);
+  Serial.println(" seconds to leave MQTT connexion timeout and ensure successful reconnection.");
 #endif
+
+  delay( (MQTTKEEPALIVE + 5) * 1000 );
 
 #ifdef CFG_ON_SERIAL
   Serial.print("Connecting to ");
@@ -72,7 +83,7 @@ void setup() {
   mqtt.DeviceName = _MANUF + "_" + _MODEL + "_" + MAC;
   mqtt.setCallback(HAMQTT_Callback);
   
-  mqtt.begin(&wifiClient, mqtt_server, mqtt_server_port);
+  mqtt.begin(&wifiClient, mqtt_server, mqtt_server_port, MQTTBUFFER, MQTTKEEPALIVE);
 }
 
 void loop() {
@@ -86,8 +97,23 @@ void loop() {
       // Try to read actual values from MQTT to restore previous state
       mqtt.readValues();
       _bMqttConfigPublished = true;
+
+      // After Mqtt config published, set diagnostic values
+      mqtt.setValue("IP", WiFi.localIP().toString());
+      mqtt.setValue("MAC", WiFi.macAddress());
+      mqtt.setValue("SSID", WiFi.SSID());
+      
+      // DON'T CALL mqtt.sendValues(); here, otherwise default values for ALL items will overwrite actual Mqtt values.
+      // mqtt.readValues(); called earlier here is async. After getting initial values, sendValues() will be called and
+      // everything will be written to Mqtt.
     }
   }
+  
+  // if (something)
+  // {
+  //   // Send event "up_pressed"
+  //   mqtt.sendEvent("Button", "up_pressed");
+  // }
 }
 
 void publishMqttConfig()
@@ -95,13 +121,17 @@ void publishMqttConfig()
 #ifdef DEBUG
   Serial.println("Publishing config:");
 #endif
+
+  mqtt.publishConfigSensor("diagnostic", "", "", "IP", "mdi:ip-network", "", "");
+  mqtt.publishConfigSensor("diagnostic", "", "", "MAC", "mdi:table-network", "", "");
+  mqtt.publishConfigSensor("diagnostic", "", "", "SSID", "mdi:access-point-network", "", "");
   
-  mqtt.publishConfigSensor("", "", "Button", "mdi:gesture-tap-button", "", "None");
-  mqtt.publishConfigSensor("", "", "Position", "mdi:window-shutter-settings", "%", "0");
-  mqtt.publishConfigSensor("", "", "Status", "mdi:window-shutter", "", "Up");
-  mqtt.publishConfigSensor("temperature", "measurement", "Temperature", "", "°C", "None");
-  mqtt.publishConfigSensor("precipitation", "total_incresing", "Rain", "", "mm", "None");
-  mqtt.publishConfigBinarySensor("smoke", "", "", "false", "true", "false");
+  mqtt.publishConfigSensor("", "", "", "Button", "mdi:gesture-tap-button", "", "None");
+  mqtt.publishConfigSensor("", "", "", "Position", "mdi:window-shutter-settings", "%", "0");
+  mqtt.publishConfigSensor("", "", "", "Status", "mdi:window-shutter", "", "Up");
+  mqtt.publishConfigSensor("", "temperature", "measurement", "Temperature", "", "°C", "None");
+  mqtt.publishConfigSensor("", "precipitation", "total_incresing", "Rain", "", "mm", "None");
+  mqtt.publishConfigBinarySensor("", "smoke", "", "", "false", "true", "false");
   mqtt.publishConfigNumber("config", "Duration", "mdi:timer", "s", "0", "300", "25");
   mqtt.publishConfigNumber("config", "Shadow position", "mdi:window-shutter-alert", "%", "5", "95", "85");
   mqtt.publishConfigButton("", "Open", "mdi:window-shutter-open", "Command", "open");
@@ -112,6 +142,9 @@ void publishMqttConfig()
   String options[] = { "Open", "Close", "None" };
   mqtt.publishConfigSelect("config", "Startup init", "mdi:cog-refresh", options, 3, "Open");
   mqtt.publishConfigSwitch("config", "Enabled", "mdi:blur", "true");
+
+  String eventtypes[] = { "up_pressed", "up_released", "down_pressed", "down_released" };
+  mqtt.publishConfigEvent("", "Button", eventtypes, 4);
 }
 
 void HAMQTT_Callback(String item, String payload, bool readFromMQTT)
@@ -128,7 +161,7 @@ void HAMQTT_Callback(String item, String payload, bool readFromMQTT)
 
   // PROCESS NEW DATA HERE
 
-  if (item != "Command")
+  if (item != "Command" && !readFromMQTT)
   {
     mqtt.setValue(item, payload);
     mqtt.sendValues();

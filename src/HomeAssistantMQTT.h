@@ -1,77 +1,94 @@
 #pragma once
 
-#include <Arduino.h>
+#include "Arduino.h"
+#include "PubSubClient.h"
+#include "ArduinoJson.h"
 
-#if defined(ESP8266) || defined(ESP32)
-
-#if defined(ESP8266)
-#include <ESP8266WiFi.h>
-#else
-#include <WiFi.h>
+#ifdef ESP8266
+#include "ESP8266WiFi.h"
 #endif
 
-#include <PubSubClient.h>
-#include <ArduinoJson.h>
+#ifdef ESP32
+#include "WiFi.h"
+#endif
 
 #define HAMQTT_MAXITEMS 30
 
+#if defined(ESP8266) || defined(ESP32)
+#include <functional>
+#define HAMQTT_CALLBACK_SIGNATURE std::function<void(String, String, bool)> cb_callback
+#define HAMQTT_CONFIG_CALLBACK_SIGNATURE std::function<void()> cb_config_callback
+#else
+#define HAMQTT_CALLBACK_SIGNATURE void (*cb_callback)(String, String, bool)
+#define HAMQTT_CONFIG_CALLBACK_SIGNATURE void (*cb_config_callback)()
+#endif
+
 struct ItemValue
 {
-  char* item;
-  char* value;
+  String item;
+  String value;
 };
 
 
 class HomeAssistantMQTT
 {
   private:
+    WiFiClient* wifiClient;
     PubSubClient* mqttClient;
 
-    char* MqttStateTopic;
+    String StateTopic;
 
     ItemValue* values[HAMQTT_MAXITEMS];
 
     void connect(bool useOffline);
-    void publishConfig(const char* type, String category, String deviceClass, String stateClass, String name, String icon, String unit, bool commandTopic, bool stateTopic, String commandTopicName, String complement, String startupValue);
+    void publishConfig(const char* type, String category, String deviceClass, String stateClass, String name, String icon, String unit, bool commandTopic, bool stateTopic, bool stateTopicValueTemplate, String commandTopicName, String complement, String startupValue);
     void MqttCallback(char* topic, byte* payload, unsigned int length);
 
-    typedef void (*ConfigCallbackFunction)( void);
-    ConfigCallbackFunction cb_config_callback = NULL;
-    
-    typedef void (*CallbackFunction) (String item, String payload, bool readFromMQTT);
-    CallbackFunction cb_callback = NULL;
+    HAMQTT_CALLBACK_SIGNATURE;
+    HAMQTT_CONFIG_CALLBACK_SIGNATURE;
 
   public:
     String MqttUser;
     String MqttPassword;
   
+    String OriginName;
+    String OriginVersion;
+
     String Manufacturer;
     String Model;
     String Version;
-    String Name;
-    String DeviceName;
-    char* StateTopic;
+    String HADeviceName;
+    String MQTTDeviceName;
   
     HomeAssistantMQTT();
-    void begin(WiFiClient* wifiClient, const char* server, const uint16_t port, bool useOffline=true);
-    void loop(bool useOffline=true);
+    ~HomeAssistantMQTT();
+
+    void begin(const char* server, const uint16_t port, bool useOffline = true);
+    void begin(const char* server, const uint16_t port, const uint16_t bufferSize, const uint16_t keepAlive, bool useOffline = true);
+    void loop(bool useOffline = true);
 
     bool connected();
     void readValues();
     void sendValues();
-    void setConfigCallback(ConfigCallbackFunction f);
-    void setCallback(CallbackFunction f);
+    void sendCommand(String commandTopic, String payload);
+    void sendEvent(String eventName, String eventType);
+    void setCallback(HAMQTT_CALLBACK_SIGNATURE);
+    void setConfigCallback(HAMQTT_CONFIG_CALLBACK_SIGNATURE);
 
     void setValue(String item, String value);
     String getValue(String item);
+    void clearSetTopic(String item);
 
-    void publishConfigSensor(String deviceClass, String stateClass, String name, String icon, String unit, String startupValue);
-    void publishConfigBinarySensor(String deviceClass, String name, String icon, String payloadOff, String payloadOn, String startupValue);
-    void publishConfigNumber(String category, String name, String icon, String unit, String min, String max, String startupValue, String mode=String("auto"));
+    void publishConfigSensor(String category, String deviceClass, String stateClass, String name, String icon, String unit, String startupValue);
+    void publishConfigBinarySensor(String category, String deviceClass, String name, String icon, String payloadOff, String payloadOn, String startupValue);
+    void publishConfigNumber(String category, String name, String icon, String unit, String min, String max, String startupValue, String mode = String("auto"));
     void publishConfigText(String category, String name, String icon, String min, String max, String startupValue);
     void publishConfigButton(String category, String name, String icon, String commandTopicName, String payload);
     void publishConfigSelect(String category, String name, String icon, String options[], unsigned short optionsCount, String startupValue);
     void publishConfigSwitch(String category, String name, String icon, String startupValue);
-};
+    void publishConfigDeviceAutomation(String category, String type, String subtype);
+    void publishConfigEvent(String category, String name, String eventTypes[], unsigned short eventTypesCount);
 
-#endif //#if defined(ESP8266) || defined(ESP32)
+    void publishConfigCover(String category, String name, String commandTopicName, String statusEntity, String setPositionTopic, String positionEntity, String payloadOpen, String payloadClose, String payloadStop);
+    void publishConfigClimate(String category, String name, String icon, String unit, String min, String max, String step, String startupValue);
+};
