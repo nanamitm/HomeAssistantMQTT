@@ -17,8 +17,10 @@
 #if defined(ESP8266) || defined(ESP32)
 #include <functional>
 #define HAMQTT_CALLBACK_SIGNATURE std::function<void(String, String, bool)> cb_callback
+#define HAMQTT_CONFIG_CALLBACK_SIGNATURE std::function<void()> cb_config_callback
 #else
 #define HAMQTT_CALLBACK_SIGNATURE void (*cb_callback)(String, String, bool)
+#define HAMQTT_CONFIG_CALLBACK_SIGNATURE void (*cb_config_callback)()
 #endif
 
 struct ItemValue
@@ -38,11 +40,12 @@ class HomeAssistantMQTT
 
     ItemValue* values[HAMQTT_MAXITEMS];
 
-    void connect();
+    void connect(bool useOffline);
     void publishConfig(const char* type, String category, String deviceClass, String stateClass, String name, String icon, String unit, bool commandTopic, bool stateTopic, bool stateTopicValueTemplate, String commandTopicName, String complement, String startupValue);
     void MqttCallback(char* topic, byte* payload, unsigned int length);
 
     HAMQTT_CALLBACK_SIGNATURE;
+    HAMQTT_CONFIG_CALLBACK_SIGNATURE;
 
   public:
     String MqttUser;
@@ -60,9 +63,9 @@ class HomeAssistantMQTT
     HomeAssistantMQTT();
     ~HomeAssistantMQTT();
 
-    void begin(const char* server, const uint16_t port);
-    void begin(const char* server, const uint16_t port, const uint16_t bufferSize, const uint16_t keepAlive);
-    void loop();
+    void begin(const char* server, const uint16_t port, bool useOffline = true);
+    void begin(const char* server, const uint16_t port, const uint16_t bufferSize, const uint16_t keepAlive, bool useOffline = true);
+    void loop(bool useOffline = true);
 
     bool connected();
     void readValues();
@@ -70,6 +73,7 @@ class HomeAssistantMQTT
     void sendCommand(String commandTopic, String payload);
     void sendEvent(String eventName, String eventType);
     void setCallback(HAMQTT_CALLBACK_SIGNATURE);
+    void setConfigCallback(HAMQTT_CONFIG_CALLBACK_SIGNATURE);
 
     void setValue(String item, String value);
     String getValue(String item);
@@ -77,7 +81,8 @@ class HomeAssistantMQTT
 
     void publishConfigSensor(String category, String deviceClass, String stateClass, String name, String icon, String unit, String startupValue);
     void publishConfigBinarySensor(String category, String deviceClass, String name, String icon, String payloadOff, String payloadOn, String startupValue);
-    void publishConfigNumber(String category, String name, String icon, String unit, String min, String max, String startupValue);
+    void publishConfigNumber(String category, String name, String icon, String unit, String min, String max, String startupValue, String mode = String("auto"));
+    void publishConfigText(String category, String name, String icon, String min, String max, String startupValue);
     void publishConfigButton(String category, String name, String icon, String commandTopicName, String payload);
     void publishConfigSelect(String category, String name, String icon, String options[], unsigned short optionsCount, String startupValue);
     void publishConfigSwitch(String category, String name, String icon, String startupValue);

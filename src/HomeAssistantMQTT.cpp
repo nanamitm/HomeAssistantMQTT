@@ -6,6 +6,7 @@ HomeAssistantMQTT::HomeAssistantMQTT()
 {
   mqttClient = nullptr;
   wifiClient = nullptr;
+  cb_config_callback = nullptr;
     
   for (int i = 0; i < HAMQTT_MAXITEMS; i++)
     values[i] = 0;
@@ -24,12 +25,17 @@ void HomeAssistantMQTT::setCallback(HAMQTT_CALLBACK_SIGNATURE)
   this->cb_callback = cb_callback;
 }
 
-void HomeAssistantMQTT::begin(const char* server, const uint16_t port)
+void HomeAssistantMQTT::setConfigCallback(HAMQTT_CONFIG_CALLBACK_SIGNATURE)
 {
-	begin(server, port, 1024, 15);
+  this->cb_config_callback = cb_config_callback;
 }
 
-void HomeAssistantMQTT::begin(const char* server, const uint16_t port, const uint16_t bufferSize, const uint16_t keepAlive)
+void HomeAssistantMQTT::begin(const char* server, const uint16_t port, bool useOffline)
+{
+	begin(server, port, 1024, 15, useOffline);
+}
+
+void HomeAssistantMQTT::begin(const char* server, const uint16_t port, const uint16_t bufferSize, const uint16_t keepAlive, bool useOffline)
 {
   StateTopic = Manufacturer + "/" + MQTTDeviceName;
 
@@ -50,17 +56,22 @@ void HomeAssistantMQTT::begin(const char* server, const uint16_t port, const uin
   mqttClient->setServer(server, port);
   mqttClient->setCallback(std::bind(&HomeAssistantMQTT::MqttCallback, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
   mqttClient->setKeepAlive(keepAlive);
+
+  connect(useOffline);
+
+  if (cb_config_callback)
+    cb_config_callback();
 }
 
-void HomeAssistantMQTT::loop()
+void HomeAssistantMQTT::loop(bool useOffline)
 {
   if (!mqttClient->connected())
-    connect();
+    connect(useOffline);
   
   mqttClient->loop();
 }
 
-void HomeAssistantMQTT::connect()
+void HomeAssistantMQTT::connect(bool useOffline)
 {
   while (!mqttClient->connected())
   {
@@ -68,7 +79,11 @@ void HomeAssistantMQTT::connect()
     Serial.print("Attempting MQTT connection...");
 #endif
     String mqttClientId = MQTTDeviceName;
-    if (mqttClient->connect(mqttClientId.c_str(), MqttUser.c_str(), MqttPassword.c_str(), (StateTopic + "/state").c_str(), 1, true, "{\"state\":\"offline\"}"))
+    // useOffline = false connects without a Last Will, so the broker does not mark the device offline when the connection drops
+    bool res = useOffline
+      ? mqttClient->connect(mqttClientId.c_str(), MqttUser.c_str(), MqttPassword.c_str(), (StateTopic + "/state").c_str(), 1, true, "{\"state\":\"offline\"}")
+      : mqttClient->connect(mqttClientId.c_str(), MqttUser.c_str(), MqttPassword.c_str());
+    if (res)
     {
       mqttClient->publish((StateTopic + "/state").c_str(), "{\"state\":\"online\"}", true);
 #ifdef CFG_ON_SERIAL
@@ -103,10 +118,16 @@ void HomeAssistantMQTT::publishConfigBinarySensor(String category, String device
   publishConfig("binary_sensor", category, deviceClass, "", name, icon, "", false, true, true, "", complement, startupValue);
 }
 
-void HomeAssistantMQTT::publishConfigNumber(String category, String name, String icon, String unit, String min, String max, String startupValue)
+void HomeAssistantMQTT::publishConfigNumber(String category, String name, String icon, String unit, String min, String max, String startupValue, String mode)
+{
+  String complement = ",\"min\":" + min + ",\"max\":" + max + ",\"mode\":\"" + mode + "\"";
+  publishConfig("number", category, "", "", name, icon, unit, true, true, true, "", complement, startupValue);
+}
+
+void HomeAssistantMQTT::publishConfigText(String category, String name, String icon, String min, String max, String startupValue)
 {
   String complement = ",\"min\":" + min + ",\"max\":" + max + "";
-  publishConfig("number", category, "", "", name, icon, unit, true, true, true, "", complement, startupValue);
+  publishConfig("text", category, "", "", name, icon, "", true, true, true, "", complement, startupValue);
 }
 
 void HomeAssistantMQTT::publishConfigButton(String category, String name, String icon, String commandTopicName, String payload)

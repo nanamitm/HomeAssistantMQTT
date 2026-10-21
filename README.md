@@ -70,6 +70,21 @@ void loop() {
 }
 ```
 
+### begin options and config callback
+
+`begin()` and `loop()` take an optional `useOffline` argument (default `true`). With `true`, the connection registers a Last Will so the broker publishes `{"state":"offline"}` when the device disconnects. With `false`, the device connects without a Last Will.
+
+`begin()` connects to the MQTT server immediately. If a config callback was registered with `setConfigCallback()` beforehand, it is called once after this first connection, which is a convenient place to publish the device configuration:
+
+```c++
+void setup() {
+  // ...
+  mqtt.setConfigCallback(publishMqttConfig);
+  mqtt.begin(mqtt_server, mqtt_server_port);          // useOffline = true
+  // mqtt.begin(mqtt_server, mqtt_server_port, false); // no Last Will
+}
+```
+
 ### publishMqttConfig
 
 The method name can be changed. Call publishMethodxxxxxxx functions to publish all your sensors, buttons switches etc. to Home Assistant for automated device creation:
@@ -173,7 +188,7 @@ void publishConfigButton(String category, String name, String icon, String comma
 Number is a numeric field allowing user to change a numeric value.
 
 ```c++
-void publishConfigNumber(String category, String name, String icon, String unit, String min, String max, String startupValue);
+void publishConfigNumber(String category, String name, String icon, String unit, String min, String max, String startupValue, String mode = "auto");
 ```
 
 - category: config or diagnostic, or left empty, to define the group where this entity is diplayed in Home Assistant
@@ -183,6 +198,22 @@ void publishConfigNumber(String category, String name, String icon, String unit,
 - min: minimum accepted value
 - max: maximum accepted value
 - startupValue: value of the numeric field at startup of the device, if no previous value can be read from MQTT state topic
+- mode: optional, how Home Assistant displays the field: auto (default), box or slider
+
+### publishConfigText
+
+Text is a text field allowing user to change a string value.
+
+```c++
+void publishConfigText(String category, String name, String icon, String min, String max, String startupValue);
+```
+
+- category: config or diagnostic, or left empty, to define the group where this entity is diplayed in Home Assistant
+- name: name of the text field
+- icon: material design icon to illustrate the text field (see https://pictogrammers.com/library/mdi/)
+- min: minimum length of the text
+- max: maximum length of the text
+- startupValue: value of the text field at startup of the device, if no previous value can be read from MQTT state topic
 
 ### publishConfigSelect
 
